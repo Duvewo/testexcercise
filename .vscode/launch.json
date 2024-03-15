@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
-            "args": ["-srv-addr", ":5050"]
+            "args": ["-srv-addr", ":5050", "-db-addr", "postgres://wizard:wizard123@localhost:5432/wizardb?sslmode=disable"]
         }
     ]
 }

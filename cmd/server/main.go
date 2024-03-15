@@ -59,31 +59,40 @@ func main() {
 		data, err := io.ReadAll(r.Body)
 
 		if err != nil {
+			log.Printf("wizard: failed to read body %v\n", err)
+			http.Error(w, "Internal error", http.StatusConflict)
 			return
 		}
 
 		var form AuthForm
 		if err := json.Unmarshal(data, &form); err != nil {
+			log.Printf("wizard: failed to unmarshal auth data %v\n", err)
+			http.Error(w, "Internal error", http.StatusConflict)
 			return
 		}
 
 		switch form.Type {
 		case "register":
 			if err := users.Create(context.Background(), storage.User{Username: form.Username, Password: form.Password}); err != nil {
-				log.Println("Error creating " + err.Error())
+				log.Printf("register: %v\n", err)
+				http.Error(w, "Internal error", http.StatusConflict)
+				return
 			}
 		case "login":
 			exists, err := users.ExistsByUsernameAndPassword(context.Background(), storage.User{Username: form.Username, Password: form.Password})
 
 			if err != nil {
-				log.Println(err)
+				log.Printf("login: failed to search: %v\n", err)
+				http.Error(w, "Internal error", http.StatusConflict)
+				return
 			}
 
 			if !exists {
-				log.Println("Cet compte n'existe pas dans notre base des donnees.")
+				http.Error(w, "This account doesn't exist!", http.StatusUnauthorized)
+				return
 			}
 
-			log.Println("Connexion est reussi !")
+			w.WriteHeader(http.StatusOK)
 
 		}
 
@@ -94,7 +103,7 @@ func main() {
 		ws, err := upgrader.Upgrade(w, r, nil)
 
 		if err != nil {
-			log.Fatalf("failed to %s", err)
+			log.Fatalf("battle: failed to upgrade %v", err)
 			return
 		}
 
@@ -103,9 +112,23 @@ func main() {
 		user, err := users.ByUsername(context.Background(), storage.User{Username: q.Get("username")})
 
 		if err != nil {
-			log.Println(err.Error() + "wwww")
+			log.Printf("battle: failed to find account %v\n", err)
+			http.Error(w, "Internal error", http.StatusConflict)
 			return
 		}
+
+		ws.SetCloseHandler(func(code int, text string) error {
+			log.Println("someone left")
+			for _, wizard := range battle.Wizards {
+				wizard.Client.WriteJSON(ResponseForm{
+					"type": "info",
+					"data": fmt.Sprintf("Wizard %s left", user.Username),
+				})
+			}
+
+			return ws.Close()
+
+		})
 
 		switch q.Get("type") {
 		case "join":
@@ -127,26 +150,28 @@ func main() {
 			target := q.Get("target")
 			attacker := q.Get("username")
 
-			log.Printf("%s veut frapper %s\n", attacker, target)
-
 			if user.HealthPoints <= 0 {
 				ws.WriteJSON(ResponseForm{
 					"type": "info",
 					"data": "You can't throw a fireball because you are dead",
 				})
 				ws.Close()
+				return
 			}
 
 			targetUsr, err := users.ByUsername(context.Background(), storage.User{Username: target})
 
 			if err != nil {
+				log.Printf("attack: failed to find account %v\n", err)
+				http.Error(w, "Internal error", http.StatusConflict)
 				return
 			}
 
 			targetUsr.HealthPoints -= 10
 
 			if err := users.SetHealth(context.Background(), targetUsr); err != nil {
-				log.Println(err.Error() + "Upd")
+				log.Printf("attack: failed to set health %v\n", err)
+				http.Error(w, "Internal error", http.StatusConflict)
 				return
 			}
 
