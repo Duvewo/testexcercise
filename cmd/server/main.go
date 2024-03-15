@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -19,10 +20,7 @@ var (
 	FLAG_SRVADDR = flag.String("srv-addr", os.Getenv("SRV_ADDR"), "Server address")
 )
 
-type ReqRespForm struct {
-	Name string `json:"name"`
-	Data string `json:"data"`
-}
+type ResponseForm map[string]any
 
 type AuthForm struct {
 	Username string `json:"username"`
@@ -50,7 +48,11 @@ func main() {
 		log.Fatalf("failed to init db: %w", err)
 	}
 
-	db.Ping(context.Background())
+	if err := db.Ping(context.Background()); err != nil {
+		log.Fatalf("failed to ping db: %v", err)
+	}
+
+	users := storage.Users{Pool: db}
 
 	upgrader := websocket.Upgrader{}
 	r.HandleFunc("/wizard", func(w http.ResponseWriter, r *http.Request) {
@@ -67,12 +69,22 @@ func main() {
 
 		switch form.Type {
 		case "register":
-			if _, err := db.Exec(context.Background(), "INSERT INTO users (username, password) VALUES ($1, $2)", form.Username, form.Password); err != nil {
-				log.Println(err)
+			if err := users.Create(context.Background(), storage.User{Username: form.Username, Password: form.Password}); err != nil {
+				log.Println("Error creating " + err.Error())
 			}
 		case "login":
-			db.QueryRow(context.Background(), "SELECT * FROM users WHERE username = $1 AND password = $2", form.Username, form.Password)
-			log.Println("Auth est reussi comme " + form.Username)
+			exists, err := users.ExistsByUsernameAndPassword(context.Background(), storage.User{Username: form.Username, Password: form.Password})
+
+			if err != nil {
+				log.Println(err)
+			}
+
+			if !exists {
+				log.Println("Cet compte n'existe pas dans notre base des donnees.")
+			}
+
+			log.Println("Connexion est reussi !")
+
 		}
 
 	}).Methods("POST")
@@ -82,37 +94,82 @@ func main() {
 		ws, err := upgrader.Upgrade(w, r, nil)
 
 		if err != nil {
+			log.Fatalf("failed to %s", err)
 			return
 		}
 
-		var req ReqRespForm
-		ws.ReadJSON(&req)
+		q := r.URL.Query()
 
-		switch req.Name {
+		user, err := users.ByUsername(context.Background(), storage.User{Username: q.Get("username")})
+
+		if err != nil {
+			log.Println(err.Error() + "wwww")
+			return
+		}
+
+		switch q.Get("type") {
 		case "join":
 
 			for _, wizard := range battle.Wizards {
+				// При установке соединения магу приходит ивент с информацией о текущих участниках битвы
 				//Как только маг присоединяется, всем остальным участникам приходит оповещение об этом с именем мага
-
-				wizard.Client.WriteJSON(ReqRespForm{Name: "new-wizard", Data: ""})
+				ws.WriteJSON(ResponseForm{"username": wizard.Username, "health_points": wizard.HealthPoints})
+				wizard.Client.WriteJSON(ResponseForm{"username": q.Get("username")})
 			}
 
-			// wizards, err := json.Marshal(battle.Wizards)
-
-			// if err != nil {
-			// 	log.Fatalf("failed to marshal wizards: %s", err)
-			// }
-
-			ws.WriteJSON(ReqRespForm{Name: "info"})
-
 			battle.Wizards = append(battle.Wizards, Wizard{
-				// Username:     req.WName,
-				HealthPoints: 100,
+				Username:     user.Username,
+				HealthPoints: user.HealthPoints,
 				Client:       ws,
 			})
 
 		case "attack":
-			// log.Println("On veut frapper: " + req.WName)
+			target := q.Get("target")
+			attacker := q.Get("username")
+
+			log.Printf("%s veut frapper %s\n", attacker, target)
+
+			if user.HealthPoints <= 0 {
+				ws.WriteJSON(ResponseForm{
+					"type": "info",
+					"data": "You can't throw a fireball because you are dead",
+				})
+				ws.Close()
+			}
+
+			targetUsr, err := users.ByUsername(context.Background(), storage.User{Username: target})
+
+			if err != nil {
+				return
+			}
+
+			targetUsr.HealthPoints -= 10
+
+			if err := users.SetHealth(context.Background(), targetUsr); err != nil {
+				log.Println(err.Error() + "Upd")
+				return
+			}
+
+			for _, wizard := range battle.Wizards {
+				if wizard.Username == targetUsr.Username {
+					wizard.Client.WriteJSON(
+						ResponseForm{
+							"type": "info",
+							"data": fmt.Sprintf("Wizard %s vous avez frappé, votre PV est: %v", attacker, targetUsr.HealthPoints),
+						})
+
+					if targetUsr.HealthPoints <= 0 {
+						wizard.Client.WriteJSON(ResponseForm{
+							"type": "info",
+							"data": "You are dead",
+						})
+						wizard.Client.Close()
+					}
+
+					return
+				}
+			}
+
 		}
 
 	})
