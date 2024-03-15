@@ -1,0 +1,12 @@
+services:
+  server:
+    build: ./
+    ports:
+      - 5050:5050
+  db:
+    image: postgres
+    ports:
+      - 5432:5432
+    env_file:
+      - .env
+  
