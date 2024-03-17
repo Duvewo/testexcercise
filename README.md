@@ -5,15 +5,31 @@
 4. Data race (somewhat fixed)
 
 Флаги:
-```
+```go
 var (
 	FLAG_DBADDR  = flag.String("db-addr", os.Getenv("DB_ADDR"), "Database connectivity string")
 	FLAG_SRVADDR = flag.String("srv-addr", os.Getenv("SRV_ADDR"), "Server address")
 )
 ```
 
-Схема __users__:
+Роуты:
+```http
+    POST /auth с формой AuthForm
+    WS /battle с Queries (?type=join||attack&username=User[&target=User])
 ```
+
+Формы:
+```json
+    AuthForm:
+    {
+        "username": "user",
+        "password": "pass",
+        "type": "login" || "type": "register",
+    }
+```
+
+Схема __users__:
+```sql
 -- Table: public.users
 
 -- DROP TABLE IF EXISTS public.users;

@@ -83,7 +83,6 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 		target := q.Get("target")
 		attacker := q.Get("username")
 
-		//TODO: check if attacker online
 		if exists, _ := srv.Battle.FindByUsername(constraints.Wizard{
 			Username: attacker,
 		}); !exists {
@@ -113,7 +112,6 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		//TODO: check if wizard is in battle
 		exists, wizard := srv.Battle.FindByUsername(constraints.Wizard{
 			Username: target,
 		})
