@@ -13,7 +13,7 @@ import (
 )
 
 type BattleService struct {
-	constraints.Battle
+	*constraints.Battle
 	websocket.Upgrader
 	handler.Handler
 }
@@ -48,6 +48,9 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
+		srv.Battle.Delete(constraints.Wizard{
+			Username: user.Username,
+		})
 		return ws.Close()
 
 	})
@@ -67,11 +70,13 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 			"wizards": srv.Battle.Wizards,
 		})
 
-		srv.Battle.Wizards = append(srv.Battle.Wizards, constraints.Wizard{
-			Username:     user.Username,
-			HealthPoints: user.HealthPoints,
-			Client:       ws,
-		})
+		srv.Battle.Add(
+			constraints.Wizard{
+				Username:     user.Username,
+				HealthPoints: user.HealthPoints,
+				Client:       ws,
+			},
+		)
 
 		// Маг может отправить ивент-фаербол в другого указанного в ивенте мага
 	case "attack":
@@ -84,6 +89,13 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 				"type": "info",
 				"data": "You can't throw a fireball because you are dead",
 			})
+
+			srv.Battle.Delete(
+				constraints.Wizard{
+					Username: user.Username,
+				},
+			)
+
 			// Если маг умер, его вебсокет соединение обрывается.
 			ws.Close()
 
@@ -113,27 +125,29 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 			"data": fmt.Sprintf("You have successfully hit %s", targetUsr.Username),
 		})
 
-		for _, wizard := range srv.Battle.Wizards {
-			if wizard.Username == targetUsr.Username {
-				// Если у мага уменьшилось здоровье, ему приходит ивент с актуальным кол-вом здоровья.
-				wizard.Client.WriteJSON(
-					constraints.ResponseForm{
-						"type": "info",
-						"data": fmt.Sprintf("Wizard %s have hit you: %v", attacker, targetUsr.HealthPoints),
-					})
+		wizard := srv.Battle.FindByUsername(constraints.Wizard{Username: targetUsr.Username})
+		// Если у мага уменьшилось здоровье, ему приходит ивент с актуальным кол-вом здоровья.
+		wizard.Client.WriteJSON(
+			constraints.ResponseForm{
+				"type": "info",
+				"data": fmt.Sprintf("Wizard %s have hit you: %v", attacker, targetUsr.HealthPoints),
+			})
 
-				// Если здоровье мага опустилось до 0 и ниже, он умер.
-				if targetUsr.HealthPoints <= 0 {
-					wizard.Client.WriteJSON(constraints.ResponseForm{
-						"type": "info",
-						"data": "You are dead",
-					})
-					// Если маг умер, его вебсокет соединение обрывается.
-					wizard.Client.Close()
-				}
+		// Если здоровье мага опустилось до 0 и ниже, он умер.
+		if targetUsr.HealthPoints <= 0 {
+			wizard.Client.WriteJSON(constraints.ResponseForm{
+				"type": "info",
+				"data": "You are dead",
+			})
 
-				return
-			}
+			srv.Battle.Delete(constraints.Wizard{
+				Username: targetUsr.Username,
+			})
+
+			// Если маг умер, его вебсокет соединение обрывается.
+			wizard.Client.Close()
 		}
+
+		return
 	}
 }

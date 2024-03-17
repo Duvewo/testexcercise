@@ -35,13 +35,12 @@ func main() {
 	}
 
 	h := handler.Handler{Pool: db, Users: &storage.Users{Pool: db}}
-	upgrader := websocket.Upgrader{}
 
 	auth := &service.AuthService{Handler: h}
 	battle := &service.BattleService{
 		Handler:  h,
-		Upgrader: upgrader,
-		Battle:   constraints.Battle{},
+		Upgrader: websocket.Upgrader{},
+		Battle:   &constraints.Battle{},
 	}
 
 	router.HandleFunc("/wizard", auth.Handle).Methods(http.MethodPost)
