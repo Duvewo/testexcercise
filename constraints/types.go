@@ -20,15 +20,15 @@ func (b *Battle) Add(wizard Wizard) {
 	defer b.Unlock()
 	b.Wizards = append(b.Wizards, wizard)
 }
-func (b *Battle) FindByUsername(wizard Wizard) Wizard {
+func (b *Battle) FindByUsername(wizard Wizard) (bool, Wizard) {
 	b.Lock()
 	defer b.Unlock()
 	for _, w := range b.Wizards {
 		if w.Username == wizard.Username {
-			return w
+			return true, w
 		}
 	}
-	return wizard
+	return false, Wizard{}
 }
 
 func (b *Battle) Delete(wizard Wizard) {
@@ -40,6 +40,12 @@ func (b *Battle) Delete(wizard Wizard) {
 			break
 		}
 	}
+}
+
+func (b *Battle) All() []Wizard {
+	b.Lock()
+	defer b.Unlock()
+	return b.Wizards
 }
 
 type Wizard struct {

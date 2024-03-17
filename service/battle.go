@@ -41,7 +41,7 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 	// При разрыве соединения у мага всем текущим участникам приходит ивент об этом с указанием имени мага.
 	ws.SetCloseHandler(func(code int, text string) error {
 		log.Println(code, text)
-		for _, wizard := range srv.Battle.Wizards {
+		for _, wizard := range srv.Battle.All() {
 			wizard.Client.WriteJSON(constraints.ResponseForm{
 				"type": "info",
 				"data": fmt.Sprintf("Wizard %s left", user.Username),
@@ -57,7 +57,7 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 
 	switch q.Get("type") {
 	case "join":
-		for _, wizard := range srv.Battle.Wizards {
+		for _, wizard := range srv.Battle.All() {
 			// Как только маг присоединяется, всем остальным участникам приходит оповещение об этом с именем мага.
 			wizard.Client.WriteJSON(constraints.ResponseForm{
 				"username": q.Get("username"),
@@ -67,7 +67,7 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 
 		// При установке соединения магу приходит ивент с информацией о текущих участниках битвы.
 		ws.WriteJSON(constraints.ResponseForm{
-			"wizards": srv.Battle.Wizards,
+			"wizards": srv.Battle.All(),
 		})
 
 		srv.Battle.Add(
@@ -82,6 +82,17 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 	case "attack":
 		target := q.Get("target")
 		attacker := q.Get("username")
+
+		//TODO: check if attacker online
+		if exists, _ := srv.Battle.FindByUsername(constraints.Wizard{
+			Username: attacker,
+		}); !exists {
+			ws.WriteJSON(constraints.ResponseForm{
+				"type": "error",
+				"data": "You are not in game",
+			})
+			ws.Close()
+		}
 
 		// Если маг умер, он больше не может кинуть фаербол.
 		if user.HealthPoints <= 0 {
@@ -98,6 +109,20 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 
 			// Если маг умер, его вебсокет соединение обрывается.
 			ws.Close()
+
+			return
+		}
+
+		//TODO: check if wizard is in battle
+		exists, wizard := srv.Battle.FindByUsername(constraints.Wizard{
+			Username: target,
+		})
+
+		if !exists {
+			ws.WriteJSON(constraints.ResponseForm{
+				"type": "error",
+				"data": "This wizard is offline",
+			})
 
 			return
 		}
@@ -125,7 +150,13 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 			"data": fmt.Sprintf("You have successfully hit %s", targetUsr.Username),
 		})
 
-		wizard := srv.Battle.FindByUsername(constraints.Wizard{Username: targetUsr.Username})
+		exists, wizard = srv.Battle.FindByUsername(constraints.Wizard{Username: targetUsr.Username})
+
+		if !exists {
+			//todo: probably create separate function Exists()
+			return
+		}
+
 		// Если у мага уменьшилось здоровье, ему приходит ивент с актуальным кол-вом здоровья.
 		wizard.Client.WriteJSON(
 			constraints.ResponseForm{
