@@ -23,6 +23,7 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Fatalf("battle: failed to upgrade %v", err)
+
 		return
 	}
 
@@ -33,10 +34,11 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("battle: failed to find account %v\n", err)
 		http.Error(w, "Internal error", http.StatusConflict)
+
 		return
 	}
 
-	// При разрыве соединения у мага всем текущим участникам приходит ивент об этом с указанием имени мага
+	// При разрыве соединения у мага всем текущим участникам приходит ивент об этом с указанием имени мага.
 	ws.SetCloseHandler(func(code int, text string) error {
 		log.Println(code, text)
 		for _, wizard := range srv.Battle.Wizards {
@@ -52,13 +54,12 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 
 	switch q.Get("type") {
 	case "join":
-
 		for _, wizard := range srv.Battle.Wizards {
-			//Как только маг присоединяется, всем остальным участникам приходит оповещение об этом с именем мага
+			// Как только маг присоединяется, всем остальным участникам приходит оповещение об этом с именем мага.
 			wizard.Client.WriteJSON(constraints.ResponseForm{"username": q.Get("username")})
 		}
 
-		// При установке соединения магу приходит ивент с информацией о текущих участниках битвы
+		// При установке соединения магу приходит ивент с информацией о текущих участниках битвы.
 		ws.WriteJSON(constraints.ResponseForm{
 			"wizards": srv.Battle.Wizards,
 		})
@@ -69,7 +70,7 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 			Client:       ws,
 		})
 
-		//Маг может отправить ивент-фаербол в другого указанного в ивенте мага
+		// Маг может отправить ивент-фаербол в другого указанного в ивенте мага
 	case "attack":
 		target := q.Get("target")
 		attacker := q.Get("username")
@@ -80,8 +81,9 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 				"type": "info",
 				"data": "You can't throw a fireball because you are dead",
 			})
-			//Если маг умер, его вебсокет соединение обрывается.
+			// Если маг умер, его вебсокет соединение обрывается.
 			ws.Close()
+
 			return
 		}
 
@@ -90,10 +92,11 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("attack: failed to find account %v\n", err)
 			http.Error(w, "Internal error", http.StatusConflict)
+
 			return
 		}
 
-		//Каждый фаербол отнимает у цели 10 hp.
+		// Каждый фаербол отнимает у цели 10 hp.
 		targetUsr.HealthPoints -= 10
 
 		if err := srv.Handler.Users.SetHealth(context.Background(), targetUsr); err != nil {
@@ -104,32 +107,30 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 
 		ws.WriteJSON(constraints.ResponseForm{
 			"type": "info",
-			"data": fmt.Sprintf("You have succesfully hit %s", targetUsr.Username),
+			"data": fmt.Sprintf("You have successfully hit %s", targetUsr.Username),
 		})
 
 		for _, wizard := range srv.Battle.Wizards {
 			if wizard.Username == targetUsr.Username {
-				//Если у мага уменьшилось здоровье, ему приходит ивент с актуальным кол-вом здоровья
+				// Если у мага уменьшилось здоровье, ему приходит ивент с актуальным кол-вом здоровья.
 				wizard.Client.WriteJSON(
 					constraints.ResponseForm{
 						"type": "info",
 						"data": fmt.Sprintf("Wizard %s have hit you: %v", attacker, targetUsr.HealthPoints),
 					})
 
-				//Если здоровье мага опустилось до 0 и ниже, он умер.
+				// Если здоровье мага опустилось до 0 и ниже, он умер.
 				if targetUsr.HealthPoints <= 0 {
 					wizard.Client.WriteJSON(constraints.ResponseForm{
 						"type": "info",
 						"data": "You are dead",
 					})
-					//Если маг умер, его вебсокет соединение обрывается.
+					// Если маг умер, его вебсокет соединение обрывается.
 					wizard.Client.Close()
 				}
 
 				return
 			}
 		}
-
 	}
-
 }

@@ -22,7 +22,7 @@ var (
 
 func main() {
 	flag.Parse()
-	r := mux.NewRouter()
+	router := mux.NewRouter()
 
 	db, err := storage.InitDB(context.Background(), *FLAG_DBADDR)
 
@@ -44,8 +44,8 @@ func main() {
 		Battle:   constraints.Battle{},
 	}
 
-	r.HandleFunc("/wizard", auth.Handle).Methods("POST")
-	r.HandleFunc("/battle", battle.Handle)
+	router.HandleFunc("/wizard", auth.Handle).Methods(http.MethodPost)
+	router.HandleFunc("/battle", battle.Handle)
 
-	log.Fatalf("failed to init server: %s", http.ListenAndServe(*FLAG_SRVADDR, r))
+	log.Fatalf("failed to init server: %s", http.ListenAndServe(*FLAG_SRVADDR, router))
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Duvewo/testexercise/constraints"
 	"github.com/Duvewo/testexercise/handler"
 	"github.com/Duvewo/testexercise/storage"
 )
@@ -48,7 +49,6 @@ func (srv *AuthService) Handle(w http.ResponseWriter, r *http.Request) {
 	case "login":
 		srv.Login(w, r, form)
 	}
-
 }
 
 func (srv *AuthService) Create(w http.ResponseWriter, r *http.Request, form AuthForm) {
@@ -72,7 +72,7 @@ func (srv *AuthService) Create(w http.ResponseWriter, r *http.Request, form Auth
 		storage.User{
 			Username:     form.Username,
 			Password:     form.Password,
-			HealthPoints: 100,
+			HealthPoints: constraints.DefaultHealthPoints,
 		},
 	); err != nil {
 		log.Printf("register: %v\n", err)

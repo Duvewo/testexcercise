@@ -33,7 +33,7 @@ func (db *Users) Create(ctx context.Context, u User) error {
 	return err
 }
 
-// TODO: change to Update
+// TODO: change to Update.
 func (db *Users) SetHealth(ctx context.Context, u User) error {
 	const q = "UPDATE users SET health_points=$1 WHERE username = $2"
 	_, err := db.Exec(ctx, q, u.HealthPoints, u.Username)
