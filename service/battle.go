@@ -56,7 +56,10 @@ func (srv *BattleService) Handle(w http.ResponseWriter, r *http.Request) {
 	case "join":
 		for _, wizard := range srv.Battle.Wizards {
 			// Как только маг присоединяется, всем остальным участникам приходит оповещение об этом с именем мага.
-			wizard.Client.WriteJSON(constraints.ResponseForm{"username": q.Get("username")})
+			wizard.Client.WriteJSON(constraints.ResponseForm{
+				"username": q.Get("username"),
+				"type":     "new",
+			})
 		}
 
 		// При установке соединения магу приходит ивент с информацией о текущих участниках битвы.
